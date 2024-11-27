@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, json, jsonify
 import requests
 import pathlib
 import os
@@ -19,41 +19,41 @@ def get_title(title):
     response = json.loads(requests.get(url=url).text)
     return f"<p>{response["Title"]}</p>"
 
-@app.route("/movies/search/<string:title>")
-def search(title): 
-    url = f"https://api.themoviedb.org/3/search/movie?query={title}&include_adult=false&language=pt-Br&page=1"
+@app.route("/movies/search/<int:movie_id>")
+def search(movie_id): 
+    url = f"https://api.themoviedb.org/3/movie/{movie_id}?language=pt-BR"
     
     headers = {
         "accept": "application/json",
         "Authorization": f"Bearer {TMDB_TOKEN}"
     }
     
-    response = requests.get(url, headers=headers)
-    
-    if response.status_code == 200:
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status() 
         data = response.json()
-        if 'results' in data:
-            movies = data['results']
-            movie_list = []
-            for movie in movies:
-                poster_url = f"https://image.tmdb.org/t/p/w500{movie['poster_path']}" if movie.get('poster_path') else None
-                backdrop_url = f"https://image.tmdb.org/t/p/w500{movie['backdrop_path']}" if movie.get('backdrop_path') else None
-                
-                movie_data = {
-                    "title": movie['title'],
-                    "overview": movie['overview'],
-                    "release_date": movie['release_date'],
-                    "vote_average": movie['vote_average'],
-                    "vote_count": movie['vote_count'],
-                    "poster_url": poster_url,
-                    "backdrop_url": backdrop_url,
-                }
-                movie_list.append(movie_data)
-            return jsonify(movie_list)
-        else:
-            return ""
-    else:
-        return ""
+        
+        poster_url = f"https://image.tmdb.org/t/p/w500{data['poster_path']}" if data.get('poster_path') else None
+        backdrop_url = f"https://image.tmdb.org/t/p/w500{data['backdrop_path']}" if data.get('backdrop_path') else None
+        
+        movie_data = {
+            "title": data.get('title', 'Título não disponível'),
+            "overview": data.get('overview', 'Descrição não disponível'),
+            "release_date": data.get('release_date', 'Data não disponível'),
+            "vote_average": data.get('vote_average', 0),
+            "vote_count": data.get('vote_count', 0),
+            "poster_url": poster_url,
+            "backdrop_url": backdrop_url,
+        }
+        
+        return jsonify(movie_data)
+    
+    except requests.exceptions.HTTPError as http_err:
+        return jsonify({"error": f"HTTP error: {http_err}"}), response.status_code
+    except requests.exceptions.RequestException as req_err:
+        return jsonify({"error": f"Request error: {req_err}"}), 500
+    except KeyError:
+        return jsonify({"error": "Unexpected response format from API"}), 500
 
 @app.route("/movies/top-rated")
 def get_top_rated_movies():
@@ -74,6 +74,7 @@ def get_top_rated_movies():
             backdrop_url = f"https://image.tmdb.org/t/p/w500{movie['backdrop_path']}" if movie.get('backdrop_path') else None
             
             movie_data = {
+                "id": movie['id'],
                 "title": movie['title'],
                 "overview": movie['overview'],
                 "release_date": movie['release_date'],
